@@ -1,16 +1,20 @@
 CC = mpicc
-CFLAGS = -Wall -Wextra -g -O2
-LDFLAGS = -lm
+CFLAGS = -Wall -O3 -fopenmp
+LIBS = -lm
+TARGET = main
+OBJECTS = main.o funcs.o
+HEADERS = funcs.h data.h
 
-OBJECTS = main.o
+all: $(TARGET)
 
-all: program
+$(TARGET): $(OBJECTS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJECTS) $(LIBS)
 
-program: $(OBJECTS)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) -o program
+main.o: main.c $(HEADERS)
+	$(CC) $(CFLAGS) -c main.c
 
-main.o: main.c data.h
-	$(CC) $(CFLAGS) -c main.c -o main.o
+funcs.o: funcs.c funcs.h data.h
+	$(CC) $(CFLAGS) -c funcs.c
 
 clean:
-	rm -f $(OBJECTS) program
+	rm -f $(TARGET) $(OBJECTS)

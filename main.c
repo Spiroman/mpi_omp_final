@@ -26,6 +26,9 @@ int main(int argc, char **argv)
     create_mpi_object_type(&MPI_Object);
     create_mpi_result_type(&MPI_Result);
 
+    int num_results;
+    Result *results;
+
     // Only the root process reads the input file
     if (world_rank == 0)
     {
@@ -92,7 +95,8 @@ int main(int argc, char **argv)
         // Initialize requests and results arrays
         MPI_Request *send_requests = (MPI_Request *)malloc(sizeof(MPI_Request) * world_size);
         MPI_Request *recv_requests = (MPI_Request *)malloc(sizeof(MPI_Request) * world_size);
-        Result *results = (Result *)malloc(sizeof(Result) * world_size);
+        // Result *results = (Result *)malloc(sizeof(Result) * world_size);
+        PictureResult *picture_results = NULL, *pr;
 
         // Send initial data to worker threads
         int sent_pairs = 0;
@@ -106,7 +110,34 @@ int main(int argc, char **argv)
             MPI_Isend(&object_array[object_index], 1, MPI_Object, worker_rank, 0, MPI_COMM_WORLD, &send_requests[worker_rank]);
             MPI_Isend(object_array[object_index].object, object_array[object_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD, &send_requests[worker_rank]);
 
-            MPI_Irecv(&results[worker_rank], 1, MPI_Result, worker_rank, 2, MPI_COMM_WORLD, &recv_requests[worker_rank]);
+            // MPI_Irecv(&results[worker_rank], 1, MPI_Result, worker_rank, 2, MPI_COMM_WORLD, &recv_requests[worker_rank]);
+
+            MPI_Recv(&num_results, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            results = (Result *)malloc(num_results * sizeof(Result));
+            MPI_Recv(results, num_results * sizeof(Result), MPI_BYTE, i, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            // Store the results in the hashmap
+            for (int j = 0; j < num_results; j++)
+            {
+                pr = NULL;
+                int pic_id = results[j].picture;
+                HASH_FIND_INT(picture_results, &pic_id, pr);
+
+                if (pr == NULL)
+                {
+                    pr = (PictureResult *)malloc(sizeof(PictureResult));
+                    pr->picture_id = pic_id;
+                    pr->count = 0;
+                    pr->results = NULL;
+                    HASH_ADD_INT(picture_results, picture_id, pr);
+                }
+
+                pr->results = (Result *)realloc(pr->results, (pr->count + 1) * sizeof(Result));
+                pr->results[pr->count] = results[j];
+                pr->count++;
+            }
+
+            free(results);
 
             sent_pairs++;
         }
@@ -175,6 +206,8 @@ int main(int argc, char **argv)
             {
                 break;
             }
+            // Print the received picture and object
+            printf("Worker %d received picture with id %d and object with id %d:\n", world_rank, picture.id, object.id);
 
             // Worker threads receive picture and object data from root process
             Picture picture;
@@ -186,31 +219,13 @@ int main(int argc, char **argv)
             object.object = (int *)malloc(sizeof(int) * object.size);
             MPI_Recv(object.object, object.size, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-            // Print the received picture and object
-            printf("Worker %d received picture with id %d and object with id %d:\n", world_rank, picture.id, object.id);
-            // printf("picture size %d received picture with id %d and object size %d with id %d:\n", picture.size, picture.id, object.size, object.id);
-            // printf("Picture:\n");
-            // for (int i = 0; i < picture.size; i++)
-            // {
-            //     printf("%d ", picture.picture[i]);
-            //     if ((i + 1) % (int)sqrt(picture.size) == 0)
-            //     {
-            //         printf("\n");
-            //     }
-            // }
-            // printf("Object:\n");
-            // for (int i = 0; i < object.size; i++)
-            // {
-            //     printf("%d ", object.object[i]);
-            //     if ((i + 1) % (int)sqrt(object.size) == 0)
-            //     {
-            //         printf("\n");
-            //     }
-            // }
+            results = find_overlaps(picture, object, &num_results);
 
-            Result result;
-            // ... (Compute the result based on the picture and object)
-            MPI_Send(&result, 1, MPI_Result, 0, 2, MPI_COMM_WORLD);
+            // Send the results to the root process
+            MPI_Send(&num_results, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+            MPI_Send(results, num_results * sizeof(Result), MPI_BYTE, 0, 1, MPI_COMM_WORLD);
+
+            free(results);
         }
     }
 

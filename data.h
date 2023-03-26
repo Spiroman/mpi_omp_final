@@ -1,6 +1,6 @@
 #ifndef DATA_H_INCLUDED
 #define DATA_H_INCLUDED
-
+#include "uthash.h"
 #define ROOT 0
 #define STOP_WORKER 3
 
@@ -26,5 +26,13 @@ typedef struct
     int object;
     bool found;
 } Result;
+
+typedef struct
+{
+    int picture_id;
+    int count;
+    Result *results;
+    UT_hash_handle hh;
+} PictureResult;
 
 #endif

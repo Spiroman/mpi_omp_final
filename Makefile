@@ -1,20 +1,17 @@
 CC = mpicc
-CFLAGS = -Wall -O3 -fopenmp
-LIBS = -lm
-TARGET = main
-OBJECTS = main.o funcs.o
-HEADERS = funcs.h data.h
+CFLAGS = -O3 -Wall -I./include
+LDFLAGS = -fopenmp
 
-all: $(TARGET)
+all: main
 
-$(TARGET): $(OBJECTS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJECTS) $(LIBS)
+main: main.o funcs.o
+	$(CC) $(LDFLAGS) main.o funcs.o -o main
 
-main.o: main.c $(HEADERS)
+main.o: main.c funcs.h
 	$(CC) $(CFLAGS) -c main.c
 
-funcs.o: funcs.c funcs.h data.h
+funcs.o: funcs.c funcs.h
 	$(CC) $(CFLAGS) -c funcs.c
 
 clean:
-	rm -f $(TARGET) $(OBJECTS)
+	rm -f *.o main

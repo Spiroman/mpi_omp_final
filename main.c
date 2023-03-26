@@ -110,11 +110,23 @@ int main(int argc, char **argv)
             MPI_Isend(&object_array[object_index], 1, MPI_Object, worker_rank, 0, MPI_COMM_WORLD, &send_requests[worker_rank]);
             MPI_Isend(object_array[object_index].object, object_array[object_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD, &send_requests[worker_rank]);
 
-            // MPI_Irecv(&results[worker_rank], 1, MPI_Result, worker_rank, 2, MPI_COMM_WORLD, &recv_requests[worker_rank]);
+            sent_pairs++;
+        }
 
-            MPI_Recv(&num_results, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        // Process results and send new data
+        int received_results = 0;
+        while (received_results < num_pictures * num_objects)
+        {
+            int completed_worker;
+            MPI_Waitany(world_size - 1, recv_requests + 1, &completed_worker, MPI_STATUS_IGNORE);
+            completed_worker++; // Adjust the index since the root process is not included in recv_requests
+
+            // Process result
+            printf("Received result from worker %d:\n", completed_worker);
+
+            MPI_Recv(&num_results, 1, MPI_INT, completed_worker, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             results = (Result *)malloc(num_results * sizeof(Result));
-            MPI_Recv(results, num_results * sizeof(Result), MPI_BYTE, i, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(results, num_results * sizeof(Result), MPI_BYTE, completed_worker, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
             // Store the results in the hashmap
             for (int j = 0; j < num_results; j++)
@@ -139,21 +151,6 @@ int main(int argc, char **argv)
 
             free(results);
 
-            sent_pairs++;
-        }
-
-        // Process results and send new data
-        int received_results = 0;
-        while (received_results < num_pictures * num_objects)
-        {
-            int completed_worker;
-            MPI_Waitany(world_size - 1, recv_requests + 1, &completed_worker, MPI_STATUS_IGNORE);
-            completed_worker++; // Adjust the index since the root process is not included in recv_requests
-
-            // Process result
-            printf("Received result from worker %d:\n", completed_worker);
-            // ... (Process the result as needed)
-
             // Send new data if available
             if (sent_pairs < num_pictures * num_objects)
             {
@@ -164,7 +161,7 @@ int main(int argc, char **argv)
                 MPI_Isend(picture_array[picture_index].picture, picture_array[picture_index].size, MPI_INT, completed_worker, 1, MPI_COMM_WORLD, &send_requests[completed_worker]);
                 MPI_Isend(&object_array[object_index], 1, MPI_Object, completed_worker, 0, MPI_COMM_WORLD, &send_requests[completed_worker]);
                 MPI_Isend(object_array[object_index].object, object_array[object_index].size, MPI_INT, completed_worker, 1, MPI_COMM_WORLD, &send_requests[completed_worker]);
-                MPI_Irecv(&results[completed_worker], 1, MPI_Result, completed_worker, 2, MPI_COMM_WORLD, &recv_requests[completed_worker]);
+                // MPI_Irecv(&results[completed_worker], 1, MPI_Result, completed_worker, 2, MPI_COMM_WORLD, &recv_requests[completed_worker]);
                 sent_pairs++;
             }
             received_results++;

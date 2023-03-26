@@ -89,20 +89,67 @@ int main(int argc, char **argv)
             }
         }
 
-        // Send picture and object data to worker threads
-        int worker_rank = 1;
-        for (int i = 0; i < num_pictures; i++)
+        // Initialize requests and results arrays
+        MPI_Request *send_requests = (MPI_Request *)malloc(sizeof(MPI_Request) * world_size);
+        MPI_Request *recv_requests = (MPI_Request *)malloc(sizeof(MPI_Request) * world_size);
+        Result *results = (Result *)malloc(sizeof(Result) * world_size);
+
+        // Send initial data to worker threads
+        int sent_pairs = 0;
+        for (int worker_rank = 1; worker_rank < world_size; worker_rank++)
         {
-            for (int j = 0; j < num_objects; j++)
-            {
-                MPI_Send(&picture_array[i], 1, MPI_Picture, worker_rank, 0, MPI_COMM_WORLD);
-                MPI_Send(picture_array[i].picture, picture_array[i].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
-                MPI_Send(&object_array[j], 1, MPI_Object, worker_rank, 0, MPI_COMM_WORLD);
-                MPI_Send(object_array[j].object, object_array[j].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
-                worker_rank = (worker_rank + 1) % world_size;
-            }
+            int picture_index = sent_pairs / num_objects;
+            int object_index = sent_pairs % num_objects;
+
+            MPI_Isend(&picture_array[picture_index], 1, MPI_Picture, worker_rank, 0, MPI_COMM_WORLD, &send_requests[worker_rank]);
+            MPI_Isend(picture_array[picture_index].picture, picture_array[picture_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD, &send_requests[worker_rank]);
+            MPI_Isend(&object_array[object_index], 1, MPI_Object, worker_rank, 0, MPI_COMM_WORLD, &send_requests[worker_rank]);
+            MPI_Isend(object_array[object_index].object, object_array[object_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD, &send_requests[worker_rank]);
+
+            MPI_Irecv(&results[worker_rank], 1, MPI_Result, worker_rank, 2, MPI_COMM_WORLD, &recv_requests[worker_rank]);
+
+            sent_pairs++;
         }
-        // Free memory allocated for the picture and object arrays
+
+        // Process results and send new data
+        int received_results = 0;
+        while (received_results < num_pictures * num_objects)
+        {
+            int completed_worker;
+            MPI_Waitany(world_size - 1, recv_requests + 1, &completed_worker, MPI_STATUS_IGNORE);
+            completed_worker++; // Adjust the index since the root process is not included in recv_requests
+
+            // Process result
+            printf("Received result from worker %d:\n", completed_worker);
+            // ... (Process the result as needed)
+
+            // Send new data if available
+            if (sent_pairs < num_pictures * num_objects)
+            {
+                int picture_index = sent_pairs / num_objects;
+                int object_index = sent_pairs % num_objects;
+
+                MPI_Isend(&picture_array[picture_index], 1, MPI_Picture, completed_worker, 0, MPI_COMM_WORLD, &send_requests[completed_worker]);
+                MPI_Isend(picture_array[picture_index].picture, picture_array[picture_index].size, MPI_INT, completed_worker, 1, MPI_COMM_WORLD, &send_requests[completed_worker]);
+                MPI_Isend(&object_array[object_index], 1, MPI_Object, completed_worker, 0, MPI_COMM_WORLD, &send_requests[completed_worker]);
+                MPI_Isend(object_array[object_index].object, object_array[object_index].size, MPI_INT, completed_worker, 1, MPI_COMM_WORLD, &send_requests[completed_worker]);
+                MPI_Irecv(&results[completed_worker], 1, MPI_Result, completed_worker, 2, MPI_COMM_WORLD, &recv_requests[completed_worker]);
+                sent_pairs++;
+            }
+            received_results++;
+            printf("Sent %d pairs, received %d results\n", sent_pairs, received_results);
+        }
+        printf("All results received\n");
+
+        for (int worker_rank = 1; worker_rank < world_size; worker_rank++)
+        {
+            MPI_Send(NULL, 0, MPI_BYTE, worker_rank, STOP_WORKER, MPI_COMM_WORLD);
+        }
+
+        // Clean up allocated memory
+        free(send_requests);
+        free(recv_requests);
+        free(results);
         for (int i = 0; i < num_pictures; i++)
         {
             free(picture_array[i].picture);
@@ -117,36 +164,60 @@ int main(int argc, char **argv)
     }
     else
     {
-        // Worker threads receive picture and object data from root process
-        Picture picture;
-        Object object;
-        MPI_Recv(&picture, 1, MPI_Picture, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        picture.picture = (int *)malloc(sizeof(int) * picture.size);
-        MPI_Recv(picture.picture, picture.size, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        MPI_Recv(&object, 1, MPI_Object, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        object.object = (int *)malloc(sizeof(int) * object.size);
-        MPI_Recv(object.object, object.size, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Status status;
+        while (true)
+        {
+            // Check if there's a message available
+            MPI_Probe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 
-        // Print the received picture and object
-        printf("Worker %d received picture with id %d and object with id %d:\n", world_rank, picture.id, object.id);
-        printf("picture size %d received picture with id %d and object size %d with id %d:\n", picture.size, picture.id, object.size, object.id);
-        printf("Picture:\n");
-        for (int i = 0; i < picture.size; i++)
-        {
-            printf("%d ", picture.picture[i]);
-            if ((i + 1) % (int)sqrt(picture.size) == 0)
+            // If the message is a stop signal, break from the loop
+            if (status.MPI_TAG == STOP_WORKER)
             {
-                printf("\n");
+                break;
             }
-        }
-        printf("Object:\n");
-        for (int i = 0; i < object.size; i++)
-        {
-            printf("%d ", object.object[i]);
-            if ((i + 1) % (int)sqrt(object.size) == 0)
-            {
-                printf("\n");
-            }
+
+            // Worker threads receive picture and object data from root process
+            Picture picture;
+            Object object;
+            MPI_Recv(&picture, 1, MPI_Picture, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            picture.picture = (int *)malloc(sizeof(int) * picture.size);
+            MPI_Recv(picture.picture, picture.size, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&object, 1, MPI_Object, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            object.object = (int *)malloc(sizeof(int) * object.size);
+            MPI_Recv(object.object, object.size, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            // // Check if there's a stop signal
+            // if (object.stop_signal)
+            // {
+            //     printf("Worker %d received stop signal\n", world_rank);
+            //     break;
+            // }
+
+            // Print the received picture and object
+            printf("Worker %d received picture with id %d and object with id %d:\n", world_rank, picture.id, object.id);
+            // printf("picture size %d received picture with id %d and object size %d with id %d:\n", picture.size, picture.id, object.size, object.id);
+            // printf("Picture:\n");
+            // for (int i = 0; i < picture.size; i++)
+            // {
+            //     printf("%d ", picture.picture[i]);
+            //     if ((i + 1) % (int)sqrt(picture.size) == 0)
+            //     {
+            //         printf("\n");
+            //     }
+            // }
+            // printf("Object:\n");
+            // for (int i = 0; i < object.size; i++)
+            // {
+            //     printf("%d ", object.object[i]);
+            //     if ((i + 1) % (int)sqrt(object.size) == 0)
+            //     {
+            //         printf("\n");
+            //     }
+            // }
+
+            Result result;
+            // ... (Compute the result based on the picture and object)
+            MPI_Send(&result, 1, MPI_Result, 0, 2, MPI_COMM_WORLD);
         }
     }
 

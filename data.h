@@ -2,6 +2,7 @@
 #define DATA_H_INCLUDED
 
 #define ROOT 0
+#define STOP_WORKER 3
 
 typedef struct
 {

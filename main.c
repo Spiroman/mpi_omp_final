@@ -4,6 +4,7 @@
 #include <math.h>
 #include "mpi.h"
 #include "data.h"
+#include "funcs.h"
 
 void create_mpi_result_type(MPI_Datatype *mpi_result_type);
 void create_mpi_object_type(MPI_Datatype *mpi_object_type);
@@ -203,8 +204,6 @@ int main(int argc, char **argv)
             {
                 break;
             }
-            // Print the received picture and object
-            printf("Worker %d received picture with id %d and object with id %d:\n", world_rank, picture.id, object.id);
 
             // Worker threads receive picture and object data from root process
             Picture picture;
@@ -216,7 +215,10 @@ int main(int argc, char **argv)
             object.object = (int *)malloc(sizeof(int) * object.size);
             MPI_Recv(object.object, object.size, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-            results = find_overlaps(picture, object, &num_results);
+            // Print the received picture and object
+            printf("Worker %d received picture with id %d and object with id %d:\n", world_rank, picture.id, object.id);
+
+            results = find_overlaps(picture, object, &num_results, 0.1);
 
             // Send the results to the root process
             MPI_Send(&num_results, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);

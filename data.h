@@ -1,5 +1,7 @@
 #ifndef DATA_H_INCLUDED
 #define DATA_H_INCLUDED
+
+#include <stdbool.h>
 #include "uthash.h"
 #define ROOT 0
 #define STOP_WORKER 3

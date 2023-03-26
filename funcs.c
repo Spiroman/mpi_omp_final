@@ -1,9 +1,9 @@
 #include "funcs.h"
 
-Result *find_overlaps(Picture picture, Object object, int *num_results)
+Result *find_overlaps(Picture picture, Object object, int *num_results, double threshold)
 {
-    int picture_dim = sqrt(picture.size);
-    int object_dim = sqrt(object.size);
+    int picture_dim = (int)sqrt(picture.size);
+    int object_dim = (int)sqrt(object.size);
     int max_i = picture_dim - object_dim + 1;
     int max_j = picture_dim - object_dim + 1;
 
@@ -29,7 +29,7 @@ Result *find_overlaps(Picture picture, Object object, int *num_results)
                 }
             }
 
-            if (sum < THRESHOLD_CONSTANT)
+            if (sum < threshold)
             {
 #pragma omp critical
                 {

@@ -3,7 +3,7 @@
 
 #define ROOT 0
 
-typdef struct
+typedef struct
 {
     int id;
     int size;

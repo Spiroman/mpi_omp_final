@@ -1,10 +1,16 @@
-build:
-	mpicxx -fopenmp -c main.c 
-	mpicxx -fopenmp -c funcs.c 
-	mpicxx -fopenmp -o match main.o funcs.o 
+CC = mpicc
+CFLAGS = -Wall -Wextra -g -O2
+LDFLAGS = -lm
+
+OBJECTS = main.o
+
+all: program
+
+program: $(OBJECTS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) -o program
+
+main.o: main.c data.h
+	$(CC) $(CFLAGS) -c main.c -o main.o
 
 clean:
-	rm -f *.o ./match
-
-run:
-	mpiexec -n 4 ./match < input.txt
+	rm -f $(OBJECTS) program

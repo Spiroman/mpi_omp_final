@@ -186,13 +186,6 @@ int main(int argc, char **argv)
             object.object = (int *)malloc(sizeof(int) * object.size);
             MPI_Recv(object.object, object.size, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-            // // Check if there's a stop signal
-            // if (object.stop_signal)
-            // {
-            //     printf("Worker %d received stop signal\n", world_rank);
-            //     break;
-            // }
-
             // Print the received picture and object
             printf("Worker %d received picture with id %d and object with id %d:\n", world_rank, picture.id, object.id);
             // printf("picture size %d received picture with id %d and object size %d with id %d:\n", picture.size, picture.id, object.size, object.id);

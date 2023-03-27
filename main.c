@@ -32,6 +32,7 @@ int main(int argc, char **argv)
 
     int num_results;
     Result *results;
+    Result result;
 
     // Only the root process reads the input file
     if (rank == 0)
@@ -129,39 +130,34 @@ int main(int argc, char **argv)
 
         while (received_results < num_pictures * num_objects)
         {
-            MPI_Recv(&num_results, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
+            MPI_Recv(&result, sizeof(Result), MPI_BYTE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
             worker_rank = status.MPI_SOURCE;
-            results = (Result *)malloc(num_results * sizeof(Result));
-            MPI_Recv(results, num_results * sizeof(Result), MPI_BYTE, worker_rank, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            if (num_results > 0)
+
+            if (result.found)
             {
-                // Store the results in the hashmap
-                for (int j = 0; j < num_results; j++)
+                pr = NULL;
+                int pic_id = result.picture;
+
+                // Find the picture in the hashmap
+                HASH_FIND_INT(picture_results, &pic_id, pr);
+
+                // If the picture is not in the hashmap, add it
+                if (pr == NULL)
                 {
-                    pr = NULL;
-                    int pic_id = results[j].picture;
-
-                    // Find the picture in the hashmap
-                    HASH_FIND_INT(picture_results, &pic_id, pr);
-
-                    // If the picture is not in the hashmap, add it
-                    if (pr == NULL)
-                    {
-                        pr = (PictureResult *)malloc(sizeof(PictureResult));
-                        pr->picture_id = pic_id;
-                        pr->count = 0;
-                        pr->results = NULL;
-                        HASH_ADD_INT(picture_results, picture_id, pr);
-                    }
-
-                    // Add the result to the picture
-                    pr->results = (Result *)realloc(pr->results, (pr->count + 1) * sizeof(Result));
-                    pr->results[pr->count] = results[j];
-                    pr->count++;
+                    pr = (PictureResult *)malloc(sizeof(PictureResult));
+                    pr->picture_id = pic_id;
+                    pr->count = 0;
+                    pr->results = NULL;
+                    HASH_ADD_INT(picture_results, picture_id, pr);
                 }
+
+                // Add the result to the picture
+                pr->results = (Result *)realloc(pr->results, (pr->count + 1) * sizeof(Result));
+                pr->results[pr->count] = result;
+                pr->count++;
             }
 
-            free(results);
+            // free(results);
 
             // Send new data if available
             if (sent_pairs < num_pictures * num_objects)
@@ -207,7 +203,7 @@ int main(int argc, char **argv)
         // Iterate through the picture_results hashmap
         PictureResult *tmp;
         pr = NULL;
-        
+
         printf("Preparing output\n");
         HASH_ITER(hh, picture_results, pr, tmp)
         {
@@ -275,13 +271,11 @@ int main(int argc, char **argv)
             // Print the received picture and object
             printf("Worker %d received picture with id %d and object with id %d:\n", rank, picture.id, object.id);
 
-            results = find_overlaps(picture, object, &num_results, threshold);
+            result = find_overlap(picture, object, threshold);
 
-            // Send the results to the root process
-            MPI_Send(&num_results, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-            MPI_Send(results, num_results * sizeof(Result), MPI_BYTE, 0, 1, MPI_COMM_WORLD);
-
-            free(results);
+            // Send the result to the root process
+            MPI_Send(&result, sizeof(Result), MPI_BYTE, 0, 0, MPI_COMM_WORLD);
+            // free(results);
         }
     }
 

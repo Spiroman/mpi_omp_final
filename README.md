@@ -17,7 +17,7 @@ This runs without a problem on Afeka's Parallel Vlab machines.
 2. `make run`
 3. (optional) `make clean`
 
-# MacOS
+### MacOS
 To run this on macos machine follow these steps from the project folder:
 1. `brew install llvm libomp` - This installs the necessary compilers for `openmp` and `mpi`.
 2. `cp makes/macos-make Makefile`

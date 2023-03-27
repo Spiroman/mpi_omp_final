@@ -3,6 +3,6 @@
 
 #include "data.h"
 
-Result find_overlap(Picture picture, Object object, double threshold);
+void find_overlap(Picture picture, Object object, double threshold, Result *result);
 
 #endif

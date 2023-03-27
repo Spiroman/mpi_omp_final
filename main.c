@@ -12,6 +12,7 @@
 #define MAX_STRING_SIZE 1024
 #define OUTPUT_FILE "output.txt"
 #define MAX_OBJECTS_FOUND 3
+#define INPUT_FILE "input.txt"
 
 void create_mpi_result_type(MPI_Datatype *mpi_result_type);
 void create_mpi_object_type(MPI_Datatype *mpi_object_type);
@@ -35,16 +36,15 @@ int main(int argc, char **argv)
     create_mpi_object_type(&MPI_Object);
     create_mpi_result_type(&MPI_Result);
 
-    Result result;
-
     // Only the root process reads the input file
     if (rank == 0)
     {
+        Result result;
         // float matching;
         int picture_size, object_size, num_pictures, num_objects;
 
         // Open input file
-        FILE *inputFile = fopen("input.txt", "r");
+        FILE *inputFile = fopen(INPUT_FILE, "r");
         if (inputFile == NULL)
         {
             printf("Error opening the input file.\n");
@@ -211,40 +211,39 @@ int main(int argc, char **argv)
             {
                 printf("No more data to send, waiting for remaining results\n");
                 printf("Jobs in progress: %d\n", jobs_in_progress);
+            }
+        }
+        for (int i = 0; i < jobs_in_progress; i++)
+        {
+            MPI_Recv(&result, sizeof(Result), MPI_BYTE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
+            // Process the remaining results, we might find enough matches in the last 2 jobs
+            if (result.found)
+            {
+                pr = NULL;
+                int pic_id = result.picture;
 
-                for (int i = 0; i < jobs_in_progress; i++)
+                // Find the picture in the hashmap
+                HASH_FIND_INT(picture_results, &pic_id, pr);
+
+                // If the picture is not in the hashmap, add it
+                if (pr == NULL)
                 {
-                    MPI_Recv(&result, sizeof(Result), MPI_BYTE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
-                    // Process the remaining results, we might find enough matches in the last 2 jobs
-                    if (result.found)
+                    pr = (PictureResult *)malloc(sizeof(PictureResult));
+                    pr->picture_id = pic_id;
+                    pr->count = 0;
+                    pr->results = NULL;
+                    HASH_ADD_INT(picture_results, picture_id, pr);
+                }
+                if (pr->count < 3)
+                {
+                    // Add the result to the picture
+                    pr->results = (Result *)realloc(pr->results, (pr->count + 1) * sizeof(Result));
+                    pr->results[pr->count] = result;
+                    pr->count++;
+                    objects_found_count[picture_index]++;
+                    if (objects_found_count[picture_index] == max_objects_found)
                     {
-                        pr = NULL;
-                        int pic_id = result.picture;
-
-                        // Find the picture in the hashmap
-                        HASH_FIND_INT(picture_results, &pic_id, pr);
-
-                        // If the picture is not in the hashmap, add it
-                        if (pr == NULL)
-                        {
-                            pr = (PictureResult *)malloc(sizeof(PictureResult));
-                            pr->picture_id = pic_id;
-                            pr->count = 0;
-                            pr->results = NULL;
-                            HASH_ADD_INT(picture_results, picture_id, pr);
-                        }
-                        if (pr->count < 3)
-                        {
-                            // Add the result to the picture
-                            pr->results = (Result *)realloc(pr->results, (pr->count + 1) * sizeof(Result));
-                            pr->results[pr->count] = result;
-                            pr->count++;
-                            objects_found_count[picture_index]++;
-                            if (objects_found_count[picture_index] == max_objects_found)
-                            {
-                                picture_index++;
-                            }
-                        }
+                        picture_index++;
                     }
                 }
             }
@@ -346,11 +345,11 @@ int main(int argc, char **argv)
             // Print the received picture and object
             printf("Worker %d received picture with id %d and object with id %d:\n", rank, picture.id, object.id);
 
-            result = find_overlap(picture, object, threshold);
-
+            Result *result = malloc(sizeof(Result));
+            find_overlap(picture, object, threshold, result);
             // Send the result to the root process
-            MPI_Send(&result, sizeof(Result), MPI_BYTE, 0, 0, MPI_COMM_WORLD);
-            // free(results);
+            MPI_Send(result, sizeof(Result), MPI_BYTE, 0, 0, MPI_COMM_WORLD);
+            free(result);
         }
     }
 

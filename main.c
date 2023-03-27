@@ -207,7 +207,8 @@ int main(int argc, char **argv)
         // Iterate through the picture_results hashmap
         PictureResult *tmp;
         pr = NULL;
-
+        
+        printf("Preparing output\n");
         HASH_ITER(hh, picture_results, pr, tmp)
         {
             int idx = pr->picture_id - 1;
@@ -225,7 +226,7 @@ int main(int argc, char **argv)
             }
         }
 
-        FILE *file = fopen("output.txt", "w");
+        FILE *file = fopen(OUTPUT_FILE, "w");
         if (file == NULL)
         {
             printf("Error opening output.txt for writing\n");
@@ -243,7 +244,7 @@ int main(int argc, char **argv)
                 fprintf(file, "%s\n", output_strings[i]);
             }
         }
-
+        printf("Saved output into %s\nIf you ran this with make run the output file will not be printed.\n\n", OUTPUT_FILE);
         fclose(file);
     }
     else

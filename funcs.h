@@ -2,7 +2,6 @@
 #define FUNCS_H
 
 #include "funcs.h"
-#include "mpi.h"
 #include "data.h"
 #include <stdio.h>
 #include <limits.h>

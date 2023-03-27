@@ -7,7 +7,12 @@
 #include "data.h"
 #include "funcs.h"
 
-// Result *find_overlaps(Picture picture, Object object, int *num_results, double threshold);
+#define ROOT 0
+#define STOP_WORKER 3
+#define MAX_STRING_SIZE 1024
+#define OUTPUT_FILE "output.txt"
+#define MAX_OBJECTS_FOUND 3
+
 void create_mpi_result_type(MPI_Datatype *mpi_result_type);
 void create_mpi_object_type(MPI_Datatype *mpi_object_type);
 void create_mpi_picture_type(MPI_Datatype *mpi_picture_type);
@@ -25,13 +30,11 @@ int main(int argc, char **argv)
     // Declare MPI datatypes
     MPI_Datatype MPI_Picture, MPI_Object, MPI_Result;
 
-    // Create MPI datatypes
+    // Create MPI datatypes for inner process communication
     create_mpi_picture_type(&MPI_Picture);
     create_mpi_object_type(&MPI_Object);
     create_mpi_result_type(&MPI_Result);
 
-    int num_results;
-    Result *results;
     Result result;
 
     // Only the root process reads the input file
@@ -40,6 +43,7 @@ int main(int argc, char **argv)
         // float matching;
         int picture_size, object_size, num_pictures, num_objects;
 
+        // Open input file
         FILE *inputFile = fopen("input.txt", "r");
         if (inputFile == NULL)
         {
@@ -49,6 +53,7 @@ int main(int argc, char **argv)
 
         // Read matching score from stdin
         fscanf(inputFile, "%f", &threshold);
+
         // Broadcast matching score to all worker processes
         MPI_Bcast(&threshold, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
@@ -94,8 +99,6 @@ int main(int argc, char **argv)
             // Set size of the object to picture_size^2
             object_array[i].size = object_size * object_size;
 
-            // Compute width and height of the object
-
             // Allocate memory for the object array
             object_array[i].object = (int *)malloc(sizeof(int) * object_array[i].size);
 
@@ -106,31 +109,54 @@ int main(int argc, char **argv)
             }
         }
 
+        // Start keeping track of how many objects were found for each picture
+        int objects_found_count[num_pictures];
+
+        for (int i = 0; i < num_pictures; i++)
+        {
+            objects_found_count[i] = 0;
+        }
+        int picture_index = 0;
+        int object_index = 0;
+        int max_objects_found = 3;
+        int jobs_in_progress = 0;
+
         // Send initial data to worker threads
-        int sent_pairs = 0;
         for (int worker_rank = 1; worker_rank < world_size; worker_rank++)
         {
-            int picture_index = sent_pairs / num_objects;
-            int object_index = sent_pairs % num_objects;
-
-            MPI_Send(&picture_array[picture_index], 1, MPI_Picture, worker_rank, 0, MPI_COMM_WORLD);
-            MPI_Send(picture_array[picture_index].picture, picture_array[picture_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
-            MPI_Send(&object_array[object_index], 1, MPI_Object, worker_rank, 0, MPI_COMM_WORLD);
-            MPI_Send(object_array[object_index].object, object_array[object_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
-
-            sent_pairs++;
+            if (picture_index < num_pictures && objects_found_count[picture_index] < max_objects_found)
+            {
+                // Send data to worker
+                MPI_Send(&picture_array[picture_index], 1, MPI_Picture, worker_rank, 0, MPI_COMM_WORLD);
+                MPI_Send(picture_array[picture_index].picture, picture_array[picture_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
+                MPI_Send(&object_array[object_index], 1, MPI_Object, worker_rank, 0, MPI_COMM_WORLD);
+                MPI_Send(object_array[object_index].object, object_array[object_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
+                // Update object and picture indexes
+                object_index++;
+                if (object_index == num_objects)
+                {
+                    object_index = 0;
+                    picture_index++;
+                }
+                jobs_in_progress++;
+            }
+            else
+            {
+                break;
+            }
         }
 
         // Process results and send new data
         PictureResult *picture_results = NULL;
         PictureResult *pr;
-        int received_results = 0;
         int worker_rank;
         MPI_Status status;
 
-        while (received_results < num_pictures * num_objects)
+        // While we're in bounds of unchecked picture and object pairs
+        while (picture_index < num_pictures && object_index < num_objects)
         {
             MPI_Recv(&result, sizeof(Result), MPI_BYTE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
+            jobs_in_progress--;
             worker_rank = status.MPI_SOURCE;
 
             if (result.found)
@@ -150,29 +176,48 @@ int main(int argc, char **argv)
                     pr->results = NULL;
                     HASH_ADD_INT(picture_results, picture_id, pr);
                 }
-
-                // Add the result to the picture
-                pr->results = (Result *)realloc(pr->results, (pr->count + 1) * sizeof(Result));
-                pr->results[pr->count] = result;
-                pr->count++;
+                if (pr->count < 3)
+                {
+                    // Add the result to the picture
+                    pr->results = (Result *)realloc(pr->results, (pr->count + 1) * sizeof(Result));
+                    pr->results[pr->count] = result;
+                    pr->count++;
+                    objects_found_count[picture_index]++;
+                    if (objects_found_count[picture_index] == max_objects_found)
+                    {
+                        picture_index++;
+                    }
+                }
             }
 
-            // free(results);
-
             // Send new data if available
-            if (sent_pairs < num_pictures * num_objects)
+            if (picture_index < num_pictures && objects_found_count[picture_index] < max_objects_found)
             {
-                int picture_index = sent_pairs / num_objects;
-                int object_index = sent_pairs % num_objects;
-
+                // Send data to worker
                 MPI_Send(&picture_array[picture_index], 1, MPI_Picture, worker_rank, 0, MPI_COMM_WORLD);
                 MPI_Send(picture_array[picture_index].picture, picture_array[picture_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
                 MPI_Send(&object_array[object_index], 1, MPI_Object, worker_rank, 0, MPI_COMM_WORLD);
                 MPI_Send(object_array[object_index].object, object_array[object_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
-                sent_pairs++;
+                object_index++;
+                if (object_index == num_objects)
+                {
+                    object_index = 0;
+                    picture_index++;
+                }
+                jobs_in_progress++;
             }
-            received_results++;
-            printf("Sent %d pairs, received %d results\n", sent_pairs, received_results);
+            // Receive remaining results to not block the workers (blocking MPI_Recv) and root
+            else
+            {
+                printf("No more data to send, waiting for remaining results\n");
+                printf("Jobs in progress: %d\n", jobs_in_progress);
+                // We can skip the last potential results because we're limiting ourselvs to 3 objects per picture
+                // At the same time we are guar
+                for (int i = 0; i < jobs_in_progress; i++)
+                {
+                    MPI_Recv(&result, sizeof(Result), MPI_BYTE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
+                }
+            }
         }
         printf("All results received\n");
 

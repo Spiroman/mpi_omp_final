@@ -4,8 +4,9 @@
 #include <math.h>
 #include "mpi.h"
 #include "data.h"
+#include "funcs.h"
 
-Result *find_overlaps(Picture picture, Object object, int *num_results, double threshold);
+// Result *find_overlaps(Picture picture, Object object, int *num_results, double threshold);
 void create_mpi_result_type(MPI_Datatype *mpi_result_type);
 void create_mpi_object_type(MPI_Datatype *mpi_object_type);
 void create_mpi_picture_type(MPI_Datatype *mpi_picture_type);
@@ -14,9 +15,10 @@ int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);
 
-    int world_rank, world_size;
+    int rank, world_size;
+    float threshold;
 
-    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
     // Declare MPI datatypes
@@ -31,13 +33,15 @@ int main(int argc, char **argv)
     Result *results;
 
     // Only the root process reads the input file
-    if (world_rank == 0)
+    if (rank == 0)
     {
-        float matching;
+        // float matching;
         int picture_size, object_size, num_pictures, num_objects;
 
         // Read matching score from stdin
-        scanf("%f", &matching);
+        scanf("%f", &threshold);
+        // Broadcast matching score to all worker processes
+        MPI_Bcast(&threshold, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
         // Read number of pictures from stdin
         scanf("%d", &num_pictures);
@@ -93,10 +97,6 @@ int main(int argc, char **argv)
             }
         }
 
-        // Initialize requests and results arrays
-        MPI_Request *send_requests = (MPI_Request *)malloc(sizeof(MPI_Request) * world_size);
-        MPI_Request *recv_requests = (MPI_Request *)malloc(sizeof(MPI_Request) * world_size);
-        // Result *results = (Result *)malloc(sizeof(Result) * world_size);
         PictureResult *picture_results = NULL, *pr;
 
         // Send initial data to worker threads
@@ -106,28 +106,28 @@ int main(int argc, char **argv)
             int picture_index = sent_pairs / num_objects;
             int object_index = sent_pairs % num_objects;
 
-            MPI_Isend(&picture_array[picture_index], 1, MPI_Picture, worker_rank, 0, MPI_COMM_WORLD, &send_requests[worker_rank]);
-            MPI_Isend(picture_array[picture_index].picture, picture_array[picture_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD, &send_requests[worker_rank]);
-            MPI_Isend(&object_array[object_index], 1, MPI_Object, worker_rank, 0, MPI_COMM_WORLD, &send_requests[worker_rank]);
-            MPI_Isend(object_array[object_index].object, object_array[object_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD, &send_requests[worker_rank]);
+            MPI_Send(&picture_array[picture_index], 1, MPI_Picture, worker_rank, 0, MPI_COMM_WORLD);
+            MPI_Send(picture_array[picture_index].picture, picture_array[picture_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
+            MPI_Send(&object_array[object_index], 1, MPI_Object, worker_rank, 0, MPI_COMM_WORLD);
+            MPI_Send(object_array[object_index].object, object_array[object_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
 
             sent_pairs++;
         }
 
         // Process results and send new data
         int received_results = 0;
+        int worker_rank;
+        MPI_Status status;
         while (received_results < num_pictures * num_objects)
         {
-            int completed_worker;
-            MPI_Waitany(world_size - 1, recv_requests + 1, &completed_worker, MPI_STATUS_IGNORE);
-            completed_worker++; // Adjust the index since the root process is not included in recv_requests
+            // MPI_Recv(&num_results, 1, MPI_INT, completed_worker, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            // results = (Result *)malloc(num_results * sizeof(Result));
+            // MPI_Recv(results, num_results * sizeof(Result), MPI_BYTE, completed_worker, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-            // Process result
-            printf("Received result from worker %d:\n", completed_worker);
-
-            MPI_Recv(&num_results, 1, MPI_INT, completed_worker, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&num_results, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
+            worker_rank = status.MPI_SOURCE;
             results = (Result *)malloc(num_results * sizeof(Result));
-            MPI_Recv(results, num_results * sizeof(Result), MPI_BYTE, completed_worker, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(results, num_results * sizeof(Result), MPI_BYTE, worker_rank, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
             // Store the results in the hashmap
             for (int j = 0; j < num_results; j++)
@@ -158,10 +158,10 @@ int main(int argc, char **argv)
                 int picture_index = sent_pairs / num_objects;
                 int object_index = sent_pairs % num_objects;
 
-                MPI_Isend(&picture_array[picture_index], 1, MPI_Picture, completed_worker, 0, MPI_COMM_WORLD, &send_requests[completed_worker]);
-                MPI_Isend(picture_array[picture_index].picture, picture_array[picture_index].size, MPI_INT, completed_worker, 1, MPI_COMM_WORLD, &send_requests[completed_worker]);
-                MPI_Isend(&object_array[object_index], 1, MPI_Object, completed_worker, 0, MPI_COMM_WORLD, &send_requests[completed_worker]);
-                MPI_Isend(object_array[object_index].object, object_array[object_index].size, MPI_INT, completed_worker, 1, MPI_COMM_WORLD, &send_requests[completed_worker]);
+                MPI_Send(&picture_array[picture_index], 1, MPI_Picture, worker_rank, 0, MPI_COMM_WORLD);
+                MPI_Send(picture_array[picture_index].picture, picture_array[picture_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
+                MPI_Send(&object_array[object_index], 1, MPI_Object, worker_rank, 0, MPI_COMM_WORLD);
+                MPI_Send(object_array[object_index].object, object_array[object_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
                 // MPI_Irecv(&results[completed_worker], 1, MPI_Result, completed_worker, 2, MPI_COMM_WORLD, &recv_requests[completed_worker]);
                 sent_pairs++;
             }
@@ -174,11 +174,9 @@ int main(int argc, char **argv)
         {
             MPI_Send(NULL, 0, MPI_BYTE, worker_rank, STOP_WORKER, MPI_COMM_WORLD);
         }
-
+        printf("Sent stop signals\n");
         // Clean up allocated memory
-        free(send_requests);
-        free(recv_requests);
-        free(results);
+        printf("Freed results\n");
         for (int i = 0; i < num_pictures; i++)
         {
             free(picture_array[i].picture);
@@ -190,10 +188,30 @@ int main(int argc, char **argv)
             free(object_array[i].object);
         }
         free(object_array);
+        printf("Freed memory\n");
+
+        // Iterate through the picture_results hashmap
+        PictureResult *tmp;
+        HASH_ITER(hh, picture_results, pr, tmp)
+        {
+            if (pr->count >= 3)
+            {
+                printf("Picture ID: %d\n", pr->picture_id);
+                for (int i = 0; i < pr->count; i++)
+                {
+                    printf("Object ID: %d, Location: (%d, %d)\n", pr->results[i].object, pr->results[i].i, pr->results[i].j);
+                }
+            }
+            else
+            {
+                printf("Not enough objects were found for Picture ID: %d\n", pr->picture_id);
+            }
+        }
     }
     else
     {
         MPI_Status status;
+        MPI_Bcast(&threshold, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
         while (true)
         {
             // Check if there's a message available
@@ -216,9 +234,9 @@ int main(int argc, char **argv)
             MPI_Recv(object.object, object.size, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
             // Print the received picture and object
-            printf("Worker %d received picture with id %d and object with id %d:\n", world_rank, picture.id, object.id);
+            printf("Worker %d received picture with id %d and object with id %d:\n", rank, picture.id, object.id);
 
-            results = find_overlaps(picture, object, &num_results, 0.1);
+            results = find_overlaps(picture, object, &num_results, threshold);
 
             // Send the results to the root process
             MPI_Send(&num_results, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
@@ -295,57 +313,4 @@ void create_mpi_result_type(MPI_Datatype *mpi_result_type)
 
     MPI_Type_create_struct(5, blocklengths, displacements, types, mpi_result_type);
     MPI_Type_commit(mpi_result_type);
-}
-
-Result *find_overlaps(Picture picture, Object object, int *num_results, double threshold)
-{
-    int picture_dim = (int)sqrt(picture.size);
-    int object_dim = (int)sqrt(object.size);
-    int max_i = picture_dim - object_dim + 1;
-    int max_j = picture_dim - object_dim + 1;
-
-    int results_capacity = max_i * max_j;
-    *num_results = 0;
-    Result *results = (Result *)malloc(results_capacity * sizeof(Result));
-
-#pragma omp parallel for
-    for (int i = 0; i < max_i; i++)
-    {
-#pragma omp parallel for
-        for (int j = 0; j < max_j; j++)
-        {
-            double sum = 0.0;
-            for (int p_i = 0; p_i < object_dim; p_i++)
-            {
-                for (int p_j = 0; p_j < object_dim; p_j++)
-                {
-                    int pic_idx = (i + p_i) * picture_dim + (j + p_j);
-                    int obj_idx = p_i * object_dim + p_j;
-                    double diff = fabs((double)(picture.picture[pic_idx] - object.object[obj_idx]));
-                    sum += diff / (double)picture.picture[pic_idx];
-                }
-            }
-
-            if (sum < threshold)
-            {
-#pragma omp critical
-                {
-                    if (*num_results < results_capacity)
-                    {
-                        Result res;
-                        res.i = i;
-                        res.j = j;
-                        res.picture = picture.id;
-                        res.object = object.id;
-                        res.found = true;
-
-                        results[*num_results] = res;
-                        (*num_results)++;
-                    }
-                }
-            }
-        }
-    }
-
-    return results;
 }

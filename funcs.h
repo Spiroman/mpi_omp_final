@@ -9,6 +9,6 @@
 #include <stdbool.h>
 #include <math.h>
 
-Result *find_overlaps(Picture picture, Object object, int *num_results, double threshold);
+Result *find_overlaps(Picture picture, Object object, int *num_results, float threshold);
 
 #endif

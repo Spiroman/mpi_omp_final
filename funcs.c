@@ -1,6 +1,6 @@
 #include "funcs.h"
 
-Result *find_overlaps(Picture picture, Object object, int *num_results, int threshold)
+Result *find_overlaps(Picture picture, Object object, int *num_results, float threshold)
 {
     int picture_dim = (int)sqrt(picture.size);
     int object_dim = (int)sqrt(object.size);

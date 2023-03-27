@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <math.h>
 #include "mpi.h"
 #include "data.h"
@@ -38,13 +39,20 @@ int main(int argc, char **argv)
         // float matching;
         int picture_size, object_size, num_pictures, num_objects;
 
+        FILE *inputFile = fopen("input.txt", "r");
+        if (inputFile == NULL)
+        {
+            printf("Error opening the input file.\n");
+            return 1;
+        }
+
         // Read matching score from stdin
-        scanf("%f", &threshold);
+        fscanf(inputFile, "%f", &threshold);
         // Broadcast matching score to all worker processes
         MPI_Bcast(&threshold, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
         // Read number of pictures from stdin
-        scanf("%d", &num_pictures);
+        fscanf(inputFile, "%d", &num_pictures);
 
         // Allocate memory for the picture array
         Picture *picture_array = (Picture *)malloc(sizeof(Picture) * num_pictures);
@@ -53,8 +61,8 @@ int main(int argc, char **argv)
         for (int i = 0; i < num_pictures; i++)
         {
             // Read id and size of the picture from stdin
-            scanf("%d", &picture_array[i].id);
-            scanf("%d", &picture_size);
+            fscanf(inputFile, "%d", &picture_array[i].id);
+            fscanf(inputFile, "%d", &picture_size);
 
             // Set size of the picture to picture_size^2
             picture_array[i].size = picture_size * picture_size;
@@ -65,12 +73,12 @@ int main(int argc, char **argv)
             // Initialize each pixel in the picture
             for (int j = 0; j < picture_array[i].size; j++)
             {
-                scanf("%d", &picture_array[i].picture[j]);
+                fscanf(inputFile, "%d", &picture_array[i].picture[j]);
             }
         }
 
         // Read number of objects from stdin
-        scanf("%d", &num_objects);
+        fscanf(inputFile, "%d", &num_objects);
 
         // Allocate memory for the object array
         Object *object_array = (Object *)malloc(sizeof(Object) * num_objects);
@@ -79,8 +87,8 @@ int main(int argc, char **argv)
         for (int i = 0; i < num_objects; i++)
         {
             // Read id and size of the object from stdin
-            scanf("%d", &object_array[i].id);
-            scanf("%d", &object_size);
+            fscanf(inputFile, "%d", &object_array[i].id);
+            fscanf(inputFile, "%d", &object_size);
 
             // Set size of the object to picture_size^2
             object_array[i].size = object_size * object_size;
@@ -93,7 +101,7 @@ int main(int argc, char **argv)
             // Initialize each pixel in the object
             for (int j = 0; j < object_array[i].size; j++)
             {
-                scanf("%d", &object_array[i].object[j]);
+                fscanf(inputFile, "%d", &object_array[i].object[j]);
             }
         }
 
@@ -208,7 +216,7 @@ int main(int argc, char **argv)
                 int offset = snprintf(output_strings[idx], MAX_STRING_SIZE, "Picture ID: %d found Objects:", pr->picture_id);
                 for (int i = 0; i < pr->count && offset < MAX_STRING_SIZE; i++)
                 {
-                    offset += snprintf(output_strings[idx] + offset, MAX_STRING_SIZE - offset, " %d Position(%d, %d)", pr->results[i].object, pr->results[i].i, pr->results[i].j);
+                    offset += snprintf(output_strings[idx] + offset, MAX_STRING_SIZE - offset, " %d Position(%d, %d); ", pr->results[i].object, pr->results[i].i, pr->results[i].j);
                 }
             }
             else

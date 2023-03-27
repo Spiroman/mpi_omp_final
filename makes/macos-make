@@ -16,4 +16,4 @@ clean:
 	rm -f *.o ./exec
 
 run:
-	mpiexec -n 4 ./exec < ./inputs/input-small.txt
+	mpiexec -n 4 ./exec 

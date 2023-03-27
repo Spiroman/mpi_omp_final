@@ -97,8 +97,6 @@ int main(int argc, char **argv)
             }
         }
 
-        PictureResult *picture_results = NULL, *pr;
-
         // Send initial data to worker threads
         int sent_pairs = 0;
         for (int worker_rank = 1; worker_rank < world_size; worker_rank++)
@@ -115,39 +113,44 @@ int main(int argc, char **argv)
         }
 
         // Process results and send new data
+        PictureResult *picture_results = NULL;
+        PictureResult *pr;
         int received_results = 0;
         int worker_rank;
         MPI_Status status;
+
         while (received_results < num_pictures * num_objects)
         {
-            // MPI_Recv(&num_results, 1, MPI_INT, completed_worker, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            // results = (Result *)malloc(num_results * sizeof(Result));
-            // MPI_Recv(results, num_results * sizeof(Result), MPI_BYTE, completed_worker, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
             MPI_Recv(&num_results, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
             worker_rank = status.MPI_SOURCE;
             results = (Result *)malloc(num_results * sizeof(Result));
             MPI_Recv(results, num_results * sizeof(Result), MPI_BYTE, worker_rank, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-            // Store the results in the hashmap
-            for (int j = 0; j < num_results; j++)
+            if (num_results > 0)
             {
-                pr = NULL;
-                int pic_id = results[j].picture;
-                HASH_FIND_INT(picture_results, &pic_id, pr);
-
-                if (pr == NULL)
+                // Store the results in the hashmap
+                for (int j = 0; j < num_results; j++)
                 {
-                    pr = (PictureResult *)malloc(sizeof(PictureResult));
-                    pr->picture_id = pic_id;
-                    pr->count = 0;
-                    pr->results = NULL;
-                    HASH_ADD_INT(picture_results, picture_id, pr);
-                }
+                    pr = NULL;
+                    int pic_id = results[j].picture;
 
-                pr->results = (Result *)realloc(pr->results, (pr->count + 1) * sizeof(Result));
-                pr->results[pr->count] = results[j];
-                pr->count++;
+                    // Find the picture in the hashmap
+                    HASH_FIND_INT(picture_results, &pic_id, pr);
+
+                    // If the picture is not in the hashmap, add it
+                    if (pr == NULL)
+                    {
+                        pr = (PictureResult *)malloc(sizeof(PictureResult));
+                        pr->picture_id = pic_id;
+                        pr->count = 0;
+                        pr->results = NULL;
+                        HASH_ADD_INT(picture_results, picture_id, pr);
+                    }
+
+                    // Add the result to the picture
+                    pr->results = (Result *)realloc(pr->results, (pr->count + 1) * sizeof(Result));
+                    pr->results[pr->count] = results[j];
+                    pr->count++;
+                }
             }
 
             free(results);
@@ -162,7 +165,6 @@ int main(int argc, char **argv)
                 MPI_Send(picture_array[picture_index].picture, picture_array[picture_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
                 MPI_Send(&object_array[object_index], 1, MPI_Object, worker_rank, 0, MPI_COMM_WORLD);
                 MPI_Send(object_array[object_index].object, object_array[object_index].size, MPI_INT, worker_rank, 1, MPI_COMM_WORLD);
-                // MPI_Irecv(&results[completed_worker], 1, MPI_Result, completed_worker, 2, MPI_COMM_WORLD, &recv_requests[completed_worker]);
                 sent_pairs++;
             }
             received_results++;
@@ -175,8 +177,8 @@ int main(int argc, char **argv)
             MPI_Send(NULL, 0, MPI_BYTE, worker_rank, STOP_WORKER, MPI_COMM_WORLD);
         }
         printf("Sent stop signals\n");
+
         // Clean up allocated memory
-        printf("Freed results\n");
         for (int i = 0; i < num_pictures; i++)
         {
             free(picture_array[i].picture);
@@ -190,21 +192,40 @@ int main(int argc, char **argv)
         free(object_array);
         printf("Freed memory\n");
 
+        // Prepare to save results
+        char output_strings[num_pictures][MAX_STRING_SIZE];
+        memset(output_strings, 0, sizeof(output_strings));
+
         // Iterate through the picture_results hashmap
         PictureResult *tmp;
+        pr = NULL;
+
         HASH_ITER(hh, picture_results, pr, tmp)
         {
+            int idx = pr->picture_id - 1;
             if (pr->count >= 3)
             {
-                printf("Picture ID: %d\n", pr->picture_id);
-                for (int i = 0; i < pr->count; i++)
+                int offset = snprintf(output_strings[idx], MAX_STRING_SIZE, "Picture ID: %d found Objects:", pr->picture_id);
+                for (int i = 0; i < pr->count && offset < MAX_STRING_SIZE; i++)
                 {
-                    printf("Object ID: %d, Location: (%d, %d)\n", pr->results[i].object, pr->results[i].i, pr->results[i].j);
+                    offset += snprintf(output_strings[idx] + offset, MAX_STRING_SIZE - offset, " %d Position(%d, %d)", pr->results[i].object, pr->results[i].i, pr->results[i].j);
                 }
             }
             else
             {
-                printf("Not enough objects were found for Picture ID: %d\n", pr->picture_id);
+                snprintf(output_strings[idx], MAX_STRING_SIZE, "Not enough objects were found for Picture ID: %d", pr->picture_id);
+            }
+        }
+
+        for (int i = 0; i < num_pictures; i++)
+        {
+            if (output_strings[i][0] == '\0')
+            {
+                printf("No objects were found for Picture ID: %d\n", i + 1);
+            }
+            else
+            {
+                printf("%s\n", output_strings[i]);
             }
         }
     }
@@ -212,7 +233,6 @@ int main(int argc, char **argv)
     {
         MPI_Status status;
         MPI_Bcast(&threshold, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-        printf("Worker %d received threshold %f", rank, threshold);
         while (true)
         {
             // Check if there's a message available

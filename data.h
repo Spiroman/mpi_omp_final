@@ -5,6 +5,7 @@
 #include "uthash.h"
 #define ROOT 0
 #define STOP_WORKER 3
+#define MAX_STRING_SIZE 1024
 
 typedef struct
 {

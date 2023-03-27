@@ -73,6 +73,5 @@ Result *find_overlaps(Picture picture, Object object, int *num_results, float th
             }
         }
     }
-
     return results;
 }

@@ -225,17 +225,26 @@ int main(int argc, char **argv)
             }
         }
 
+        FILE *file = fopen("output.txt", "w");
+        if (file == NULL)
+        {
+            printf("Error opening output.txt for writing\n");
+            return 1; // Or handle the error as appropriate
+        }
+
         for (int i = 0; i < num_pictures; i++)
         {
             if (output_strings[i][0] == '\0')
             {
-                printf("No objects were found for Picture ID: %d\n", i + 1);
+                fprintf(file, "No objects were found for Picture ID: %d\n", i + 1);
             }
             else
             {
-                printf("%s\n", output_strings[i]);
+                fprintf(file, "%s\n", output_strings[i]);
             }
         }
+
+        fclose(file);
     }
     else
     {

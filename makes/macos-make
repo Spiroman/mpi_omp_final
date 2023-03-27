@@ -13,7 +13,7 @@ build:
 	$(MPICC) main.o funcs.o -o exec $(OPENMP_MACOS_LIB) -lomp
 
 clean:
-	rm -f *.o ./exec
+	rm -f *.o ./exec output.txt
 
 run:
 	mpiexec -n 4 ./exec 

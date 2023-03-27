@@ -211,11 +211,41 @@ int main(int argc, char **argv)
             {
                 printf("No more data to send, waiting for remaining results\n");
                 printf("Jobs in progress: %d\n", jobs_in_progress);
-                // We can skip the last potential results because we're limiting ourselvs to 3 objects per picture
-                // At the same time we are guar
+
                 for (int i = 0; i < jobs_in_progress; i++)
                 {
                     MPI_Recv(&result, sizeof(Result), MPI_BYTE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
+                    // Process the remaining results, we might find enough matches in the last 2 jobs
+                    if (result.found)
+                    {
+                        pr = NULL;
+                        int pic_id = result.picture;
+
+                        // Find the picture in the hashmap
+                        HASH_FIND_INT(picture_results, &pic_id, pr);
+
+                        // If the picture is not in the hashmap, add it
+                        if (pr == NULL)
+                        {
+                            pr = (PictureResult *)malloc(sizeof(PictureResult));
+                            pr->picture_id = pic_id;
+                            pr->count = 0;
+                            pr->results = NULL;
+                            HASH_ADD_INT(picture_results, picture_id, pr);
+                        }
+                        if (pr->count < 3)
+                        {
+                            // Add the result to the picture
+                            pr->results = (Result *)realloc(pr->results, (pr->count + 1) * sizeof(Result));
+                            pr->results[pr->count] = result;
+                            pr->count++;
+                            objects_found_count[picture_index]++;
+                            if (objects_found_count[picture_index] == max_objects_found)
+                            {
+                                picture_index++;
+                            }
+                        }
+                    }
                 }
             }
         }

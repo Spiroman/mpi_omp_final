@@ -13,3 +13,4 @@ clean:
 run:
 	mpiexec -n 4 ./exec 
 	cat output.txt
+

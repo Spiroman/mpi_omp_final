@@ -1,11 +1,35 @@
 #include "funcs.h"
-
+#define DEBUG 0
 Result *find_overlaps(Picture picture, Object object, int *num_results, float threshold)
 {
     int picture_dim = (int)sqrt(picture.size);
     int object_dim = (int)sqrt(object.size);
     int max_i = picture_dim - object_dim + 1;
     int max_j = picture_dim - object_dim + 1;
+
+    if (DEBUG)
+    {
+        // Print the picture and object arrays
+        printf("Picture:\n");
+        for (int i = 0; i < picture_dim; i++)
+        {
+            for (int j = 0; j < picture_dim; j++)
+            {
+                printf("%d ", picture.picture[i * picture_dim + j]);
+            }
+            printf("\n");
+        }
+
+        printf("Object:\n");
+        for (int i = 0; i < object_dim; i++)
+        {
+            for (int j = 0; j < object_dim; j++)
+            {
+                printf("%d ", object.object[i * object_dim + j]);
+            }
+            printf("\n");
+        }
+    }
 
     int results_capacity = max_i * max_j;
     *num_results = 0;

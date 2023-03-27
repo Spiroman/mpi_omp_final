@@ -1,0 +1,13 @@
+CC = clang
+CFLAGS = -Wall -fopenmp
+
+build:
+	$(CC) $(CFLAGS) -c omp-test.c
+	$(CC) $(CFLAGS) -c funcs.c
+	$(CC) $(CFLAGS) omp-test.o funcs.o -o omp
+
+clean:
+	rm -f *.o ./omp
+
+run:
+	./omp < ./inputs/input-small.txt

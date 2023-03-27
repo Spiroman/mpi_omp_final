@@ -212,6 +212,7 @@ int main(int argc, char **argv)
     {
         MPI_Status status;
         MPI_Bcast(&threshold, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+        printf("Worker %d received threshold %f", rank, threshold);
         while (true)
         {
             // Check if there's a message available

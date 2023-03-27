@@ -16,27 +16,7 @@ Result find_overlap(Picture picture, Object object, double threshold)
     int max_i = picture_dim - object_dim + 1;
     int max_j = picture_dim - object_dim + 1;
 
-    // // Print the picture and object arrays
-    // printf("Picture:\n");
-    // for (int i = 0; i < picture_dim; i++)
-    // {
-    //     for (int j = 0; j < picture_dim; j++)
-    //     {
-    //         printf("%d ", picture.picture[i * picture_dim + j]);
-    //     }
-    //     printf("\n");
-    // }
-
-    // printf("Object:\n");
-    // for (int i = 0; i < object_dim; i++)
-    // {
-    //     for (int j = 0; j < object_dim; j++)
-    //     {
-    //         printf("%d ", object.object[i * object_dim + j]);
-    //     }
-    //     printf("\n");
-    // }
-
+    // Collapse indicates that the two loops are run in parallel
 #pragma omp parallel for collapse(2)
     for (int i = 0; i <= max_i; i++)
     {
@@ -53,6 +33,7 @@ Result find_overlap(Picture picture, Object object, double threshold)
                     sum += diff / (double)picture.picture[pic_idx];
                 }
             }
+            // Make sure that we get a correct result, and that only one thread updates the result
 #pragma omp critical
             {
                 if (sum < threshold && !result.found)
